@@ -244,12 +244,20 @@ function cardHtml(tag, m, extra) {
     '</div></div>';
 }
 
+function statusCardHtml(quip) {
+  return '<div class="card">' +
+    '<span class="tag">Where\'s Mitch?</span>' +
+    '<div class="m-title">' + esc(quip) + '</div></div>';
+}
+
 function renderMeetings() {
   const wrap = document.getElementById('meeting');
   if (!meetingData) return;
   let html = '';
   if (meetingData.current) {
     html += cardHtml('Now', meetingData.current, 'ends ' + esc(meetingData.current.endLabel));
+  } else if (meetingData.status && meetingData.status.quip) {
+    html += statusCardHtml(meetingData.status.quip);
   }
   if (meetingData.next) {
     html += cardHtml('Next', meetingData.next, countdownText(meetingData.next.startISO));

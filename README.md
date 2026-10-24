@@ -17,6 +17,22 @@ Script checks a shared key on every request; the key lives in the
 script's properties and in the tablet's local storage only — it is never
 committed to this repo. The script returns only title, room, and times.
 
+## The "Where's Mitch?" card
+
+When Mitch is in a meeting, the main card shows the meeting (title,
+room, start – end). When he isn't, it shows a one-line, AI-written guess
+at where he is, based on the situation — after hours it's home/dinner/
+family themed, the small hours are sleep themed, lunchtime is lunch,
+work-hours gaps are break-room/walk themed, weekends are family themed.
+
+- Generated inside the Apps Script by Gemini (`gemini-2.0-flash`) when
+  the optional `AI_API_KEY` script property is set — get a free key at
+  aistudio.google.com/apikey. The key lives only in Script Properties.
+- Cached 30 minutes per situation, so the model is called a handful of
+  times a day even though the page polls every minute.
+- With no key (or if the call fails), built-in fallback lines rotate
+  instead — the card never breaks.
+
 ## Files
 
 - `index.html` — the dashboard page (GitHub Pages entry point).
@@ -49,6 +65,8 @@ editor right from the sheet.
    and under **Script Properties** add:
    - `DASH_KEY` — a long random key you invent. Treat it like a password.
    - `SHEET_TAB` — optional, if your data isn't on the first tab.
+   - `AI_API_KEY` — optional, enables AI-written "Where's Mitch?" quips
+     (free Gemini key from aistudio.google.com/apikey).
 2. Push the code with clasp (from this repo):
    ```
    cd apps-script
