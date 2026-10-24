@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desk Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #0b0f14;
+    color: #e8eef4;
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #layout {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    padding: 18px 22px 12px;
+    gap: 10px 26px;
+  }
+  #clock-wrap { grid-column: 1; grid-row: 1; }
+  #clock { font-size: clamp(56px, 11vw, 130px); font-weight: 700; line-height: 1; letter-spacing: -1px; }
+  #clock .ampm { font-size: 0.35em; font-weight: 600; color: #8fa3b8; margin-left: 6px; }
+  #dateline { font-size: clamp(15px, 2.2vw, 24px); color: #8fa3b8; margin-top: 4px; }
+  #weather { grid-column: 2; grid-row: 1; text-align: right; align-self: start; }
+  #wx-now { font-size: clamp(30px, 5vw, 56px); font-weight: 700; line-height: 1.05; }
+  #wx-cond { font-size: clamp(15px, 2.2vw, 24px); color: #c7d3df; }
+  #wx-sub { font-size: clamp(13px, 1.8vw, 19px); color: #8fa3b8; margin-top: 2px; }
+  #meeting { grid-column: 1 / -1; grid-row: 2; align-self: center; }
+  .card {
+    background: #131b24;
+    border: 1px solid #223041;
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+  }
+  .card.now { border-color: #b3541e; background: #221610; }
+  .tag {
+    display: inline-block; font-size: clamp(12px, 1.7vw, 17px); font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase; color: #7fb2e5; margin-bottom: 6px;
+  }
+  .card.now .tag { color: #f0a35e; }
+  .m-title { font-size: clamp(24px, 4.2vw, 46px); font-weight: 700; line-height: 1.15; }
+  .m-meta { font-size: clamp(16px, 2.6vw, 28px); color: #c7d3df; margin-top: 6px; }
+  .m-meta .room { color: #fff; font-weight: 600; }
+  .m-count { color: #7fb2e5; font-weight: 600; }
+  #empty { color: #5f7285; font-size: clamp(18px, 3vw, 32px); text-align: center; padding: 30px 0; }
+  #statusbar {
+    grid-column: 1 / -1; grid-row: 3;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: #46586a;
+  }
+  #gear { cursor: pointer; font-size: 16px; opacity: 0.5; padding: 4px 8px; }
+  #setup {
+    position: fixed; inset: 0; background: rgba(4, 8, 12, 0.96);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+  }
+  #setup.open { display: flex; }
+  #setup .box { width: min(480px, 90vw); text-align: center; }
+  #setup h1 { font-size: 26px; margin-bottom: 10px; }
+  #setup p { color: #8fa3b8; font-size: 15px; margin-bottom: 18px; line-height: 1.45; }
+  #setup input {
+    width: 100%; padding: 12px; font-size: 17px; border-radius: 8px;
+    border: 1px solid #2c3e50; background: #10161d; color: #e8eef4; margin-bottom: 10px;
+  }
+  #setup button {
+    width: 100%; padding: 12px; font-size: 17px; font-weight: 600; border: 0;
+    border-radius: 8px; background: #1f6feb; color: #fff; cursor: pointer;
+  }
+  #setup .err { color: #f08a5d; min-height: 20px; margin-top: 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="layout">
+  <div id="clock-wrap">
+    <div id="clock">--:--</div>
+    <div id="dateline">Loading…</div>
+  </div>
+  <div id="weather">
+    <div id="wx-now">--°</div>
+    <div id="wx-cond">Weather loading…</div>
+    <div id="wx-sub"></div>
+  </div>
+  <div id="meeting">
+    <div id="empty">Checking your meetings…</div>
+  </div>
+  <div id="statusbar">
+    <div id="status">Desk Dashboard</div>
+    <div id="gear" title="Settings">⚙</div>
+  </div>
+</div>
+
+<div id="setup">
+  <div class="box">
+    <h1>Desk Dashboard setup</h1>
+    <p>First time on this device: enter the Apps Script endpoint URL and
+       the dashboard key. Both are stored only on this tablet — never in
+       the page itself.</p>
+    <input id="endpoint-input" type="url" placeholder="Endpoint URL (…/exec)" autocomplete="off" style="display:none">
+    <input id="key-input" type="password" placeholder="Dashboard key" autocomplete="off">
+    <button id="key-save">Save</button>
+    <div class="err" id="setup-err"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+'use strict';
+
+/* ===================== config & state ===================== */
+const CFG = window.DASH_CONFIG || {};
+const LS_KEY = 'dash.key';
+const LS_ENDPOINT = 'dash.endpoint';
+let endpoint = CFG.endpoint || localStorage.getItem(LS_ENDPOINT) || '';
+let dashKey = localStorage.getItem(LS_KEY) || '';
+let meetingData = null;
+let lastFetchOk = null;
+
+/* ===================== clock ===================== */
+function tickClock() {
+  const now = new Date();
+  let h = now.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('clock').innerHTML =
+    h + ':' + mm + '<span class="ampm">' + ampm + '</span>';
+  document.getElementById('dateline').innerText =
+    now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+/* ===================== weather (Open-Meteo, no key) ===================== */
+const WX_TEXT = {
+  0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast',
+  45: 'Fog', 48: 'Fog', 51: 'Light drizzle', 53: 'Drizzle', 55: 'Drizzle',
+  56: 'Freezing drizzle', 57: 'Freezing drizzle',
+  61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Freezing rain', 67: 'Freezing rain',
+  71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow',
+  80: 'Light showers', 81: 'Showers', 82: 'Heavy showers', 85: 'Snow showers', 86: 'Snow showers',
+  95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm'
+};
+async function loadWeather() {
+  if (!CFG.latitude) return;
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + CFG.latitude +
+    '&longitude=' + CFG.longitude +
+    '&current=temperature_2m,weather_code,wind_speed_10m' +
+    '&daily=temperature_2m_max,temperature_2m_min' +
+    '&temperature_unit=fahrenheit&wind_speed_unit=mph' +
+    '&timezone=' + encodeURIComponent(CFG.timezone || 'auto');
+  try {
+    const res = await fetch(url);
+    const d = await res.json();
+    const cur = d.current || {};
+    const temp = Math.round(cur.temperature_2m);
+    const hi = Math.round(d.daily.temperature_2m_max[0]);
+    const lo = Math.round(d.daily.temperature_2m_min[0]);
+    document.getElementById('wx-now').innerText = temp + '°F';
+    document.getElementById('wx-cond').innerText =
+      (WX_TEXT[cur.weather_code] || '—') + ' in ' + (CFG.locationLabel || 'your area');
+    document.getElementById('wx-sub').innerText =
+      'Today ' + lo + '° – ' + hi + '° · Wind ' + Math.round(cur.wind_speed_10m || 0) + ' mph';
+  } catch (e) {
+    document.getElementById('wx-cond').innerText = 'Weather unavailable';
+  }
+}
+
+/* ===================== meetings via Apps Script (JSONP) ===================== */
+function jsonp(url) {
+  return new Promise(function (resolve, reject) {
+    const cb = 'dashCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const script = document.createElement('script');
+    const timer = setTimeout(function () { cleanup(); reject(new Error('timeout')); }, 20000);
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cb];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cb] = function (data) { cleanup(); resolve(data); };
+    script.onerror = function () { cleanup(); reject(new Error('load error')); };
+    script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + cb;
+    document.head.appendChild(script);
+  });
+}
+
+async function loadMeetings() {
+  if (!endpointKnown() || !dashKey) { openSetup(''); return; }
+  try {
+    const data = await jsonp(endpoint + '?key=' + encodeURIComponent(dashKey));
+    if (data && data.error === 'unauthorized') {
+      openSetup('That key was not accepted. Check it and save again.');
+      return;
+    }
+    if (!data || data.error) throw new Error('bad response');
+    meetingData = data;
+    lastFetchOk = new Date();
+    renderMeetings();
+    document.getElementById('status').innerText =
+      'Updated ' + lastFetchOk.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } catch (e) {
+    document.getElementById('status').innerText =
+      'Meeting data unreachable' + (lastFetchOk ? ' (last OK ' +
+      lastFetchOk.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ')' : '');
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function countdownText(startISO) {
+  const ms = new Date(startISO).getTime() - Date.now();
+  if (ms <= 0) return 'starting now';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return 'in ' + mins + ' min';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h >= 24) return 'in ' + Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+  return 'in ' + h + ' h' + (m ? ' ' + m + ' min' : '');
+}
+
+function cardHtml(tag, m, extra) {
+  return '<div class="card' + (tag === 'Now' ? ' now' : '') + '">' +
+    '<span class="tag">' + tag + '</span>' +
+    '<div class="m-title">' + esc(m.title || '(untitled)') + '</div>' +
+    '<div class="m-meta">' +
+      (m.room ? '<span class="room">' + esc(m.room) + '</span> · ' : '') +
+      esc(m.startLabel) + ' – ' + esc(m.endLabel) +
+      (extra ? ' · <span class="m-count">' + extra + '</span>' : '') +
+    '</div></div>';
+}
+
+function renderMeetings() {
+  const wrap = document.getElementById('meeting');
+  if (!meetingData) return;
+  let html = '';
+  if (meetingData.current) {
+    html += cardHtml('Now', meetingData.current, 'ends ' + esc(meetingData.current.endLabel));
+  }
+  if (meetingData.next) {
+    html += cardHtml('Next', meetingData.next, countdownText(meetingData.next.startISO));
+  }
+  wrap.innerHTML = html || '<div id="empty">No meetings on the board.</div>';
+}
+
+/* ===================== setup overlay ===================== */
+function endpointKnown() {
+  return !!endpoint && endpoint.indexOf('YOUR_DEPLOYMENT_ID') === -1;
+}
+function openSetup(msg, force) {
+  document.getElementById('setup-err').innerText = msg || '';
+  document.getElementById('key-input').value = '';
+  const ep = document.getElementById('endpoint-input');
+  const showEp = !!force || !endpointKnown();
+  ep.style.display = showEp ? 'block' : 'none';
+  if (showEp) ep.value = endpointKnown() ? endpoint : '';
+  document.getElementById('setup').classList.add('open');
+}
+function closeSetup() {
+  document.getElementById('setup').classList.remove('open');
+}
+document.getElementById('key-save').addEventListener('click', function () {
+  const ep = document.getElementById('endpoint-input');
+  if (ep.style.display !== 'none') {
+    const epv = ep.value.trim();
+    if (!epv) { document.getElementById('setup-err').innerText = 'Enter the endpoint URL first.'; return; }
+    endpoint = epv;
+    localStorage.setItem(LS_ENDPOINT, epv);
+  }
+  const v = document.getElementById('key-input').value.trim();
+  if (!v) { document.getElementById('setup-err').innerText = 'Enter the key first.'; return; }
+  dashKey = v;
+  localStorage.setItem(LS_KEY, v);
+  closeSetup();
+  loadMeetings();
+});
+document.getElementById('gear').addEventListener('click', function () { openSetup('', true); });
+
+/* ===================== init (runs last, after all declarations) ===================== */
+(function init() {
+  // One-time setup hand-off: open the page once as
+  // ?endpoint=<exec URL>&key=<key> and both are stored on the device,
+  // then removed from the address bar.
+  const q = new URLSearchParams(location.search);
+  let scrubbed = false;
+  if (q.get('endpoint')) {
+    endpoint = q.get('endpoint');
+    localStorage.setItem(LS_ENDPOINT, endpoint);
+    scrubbed = true;
+  }
+  if (q.get('key')) {
+    dashKey = q.get('key');
+    localStorage.setItem(LS_KEY, dashKey);
+    scrubbed = true;
+  }
+  if (scrubbed) history.replaceState(null, '', location.pathname);
+  tickClock();
+  setInterval(tickClock, 1000);
+  setInterval(renderMeetings, 30000); // keep the countdown fresh between fetches
+  loadWeather();
+  setInterval(loadWeather, 15 * 60 * 1000);
+  loadMeetings();
+  setInterval(loadMeetings, 60 * 1000);
+  setTimeout(function () { location.reload(); }, 6 * 60 * 60 * 1000); // kiosk hygiene
+  if (!dashKey || !endpointKnown()) openSetup('');
+})();
+</script>
+</body>
+</html>

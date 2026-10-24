@@ -1,0 +1,3 @@
+# Never commit a real config: it would publish the endpoint URL.
+# (The endpoint/key are entered on the tablet and stored only there.)
+config.js
