@@ -112,7 +112,16 @@
 'use strict';
 
 /* ===================== config & state ===================== */
-const CFG = window.DASH_CONFIG || {};
+// Built-in defaults for the desk location. Coordinates aren't secret
+// (ZIP centroid, same values as config.example.js); config.js, when
+// present, overrides them. Note config.js is gitignored, so on GitHub
+// Pages these defaults are what actually run.
+const CFG = Object.assign({
+  latitude: 37.36883,
+  longitude: -122.03635,
+  locationLabel: 'Sunnyvale · 94089',
+  timezone: 'America/Los_Angeles'
+}, window.DASH_CONFIG || {});
 const LS_KEY = 'dash.key';
 const LS_ENDPOINT = 'dash.endpoint';
 let endpoint = CFG.endpoint || localStorage.getItem(LS_ENDPOINT) || '';
