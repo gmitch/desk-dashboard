@@ -61,6 +61,12 @@ editor right from the sheet.
    - Who has access: **Anyone**
 4. Copy the deployment URL (`.../exec`).
 
+   CLI alternative: the manifest (`appsscript.json`) already carries the
+   web app config (access: ANYONE, execute as: you), so
+   `clasp deploy --description "desk-dashboard"` creates the same web app
+   deployment without the editor — take the `/exec` URL from the
+   deployment ID it prints.
+
 "Anyone" is safe here: the URL is unguessable, and the script returns
 nothing without the key — it checks the key in constant time.
 
