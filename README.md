@@ -39,22 +39,34 @@ per recurring weekly meeting:
 Day is Mon–Sun, 24h or AM/PM times both work. Without an end time a
 meeting is assumed to last 60 minutes. Note the sheet's ID from its URL.
 
-### 2. The Apps Script endpoint
-1. Go to script.google.com → New project. (Or use clasp with the
-   `apps-script/` folder, same as the FODMAP tracker.)
-2. Paste in `Code.gs` (and `appsscript.json` via Project Settings →
-   "Show appsscript.json").
-3. Project Settings → Script Properties, add:
+### 2. The Apps Script endpoint (bound to the sheet, managed with clasp)
+Bound is the easy setup here: the script lives inside the spreadsheet,
+so it reads its own sheet — no SHEET_ID to configure — and you open the
+editor right from the sheet.
+
+1. In the meetings sheet: **Extensions → Apps Script** (this creates the
+   bound project). Then **Project Settings** → note the **Script ID**,
+   and under **Script Properties** add:
    - `DASH_KEY` — a long random key you invent. Treat it like a password.
-   - `SHEET_ID` — the meetings sheet ID from step 1.
    - `SHEET_TAB` — optional, if your data isn't on the first tab.
-4. Deploy → New deployment → Web app:
+2. Push the code with clasp (from this repo):
+   ```
+   cd apps-script
+   cp .clasp.json.example .clasp.json   # paste in the Script ID
+   clasp push
+   ```
+   (`.clasp.json` is gitignored — it's per-machine config, not code.)
+3. In the web editor: **Deploy → New deployment → Web app**:
    - Execute as: **Me**
    - Who has access: **Anyone**
-5. Copy the deployment URL (`.../exec`).
+4. Copy the deployment URL (`.../exec`).
 
 "Anyone" is safe here: the URL is unguessable, and the script returns
 nothing without the key — it checks the key in constant time.
+
+After future `clasp push`es, publish the new code via **Deploy →
+Manage deployments → Edit → Version: New version** (same deployment,
+same URL — the tablet never needs reconfiguring).
 
 ### 3. The page
 Push this repo to GitHub and enable Settings → Pages → deploy from

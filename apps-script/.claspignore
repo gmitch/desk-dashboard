@@ -1,0 +1,3 @@
+# Keep non-script files out of the Apps Script project.
+.clasp.json.example
+.claspignore

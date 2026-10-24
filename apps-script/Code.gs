@@ -7,9 +7,11 @@
  *
  * Required Script Properties (Project Settings > Script Properties):
  *   DASH_KEY  - shared secret. Requests without a matching key get nothing.
- *   SHEET_ID  - id of the meetings spreadsheet.
  * Optional:
  *   SHEET_TAB - tab name. Default: the first tab.
+ *   SHEET_ID  - only needed if this script is STANDALONE. A script bound
+ *               to the spreadsheet (Extensions > Apps Script from the
+ *               sheet) reads its own spreadsheet automatically.
  *
  * Sheet layout (a header row is fine - rows that don't parse are skipped):
  *   A: Day + start time, e.g. "Fri 10:00"      (day = Mon Tue Wed Thu Fri Sat Sun)
@@ -59,9 +61,14 @@ function respond_(params, obj) {
 }
 
 function buildPayload_(props) {
-  var sheetId = props.getProperty('SHEET_ID');
-  if (!sheetId) throw new Error('SHEET_ID script property is not set');
-  var ss = SpreadsheetApp.openById(sheetId);
+  // Bound script: reads the spreadsheet it lives in.
+  // Standalone script: falls back to the SHEET_ID property.
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    var sheetId = props.getProperty('SHEET_ID');
+    if (!sheetId) throw new Error('No spreadsheet: bind the script to the sheet, or set SHEET_ID');
+    ss = SpreadsheetApp.openById(sheetId);
+  }
   var tabName = props.getProperty('SHEET_TAB');
   var sheet = tabName ? ss.getSheetByName(tabName) : ss.getSheets()[0];
   if (!sheet) throw new Error('Sheet tab not found');
