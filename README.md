@@ -28,8 +28,10 @@ work-hours gaps are break-room/walk themed, weekends are family themed.
 - Generated inside the Apps Script by Gemini (`gemini-2.0-flash`) when
   the optional `AI_API_KEY` script property is set — get a free key at
   aistudio.google.com/apikey. The key lives only in Script Properties.
-- Cached 30 minutes per situation, so the model is called a handful of
-  times a day even though the page polls every minute.
+- Cached per situation: AI-written lines stick for 30 minutes, so the
+  model is called a handful of times a day even though the page polls
+  every minute. Fallback lines are cached for only 2 minutes, so adding
+  the key takes effect almost immediately.
 - With no key (or if the call fails), built-in fallback lines rotate
   instead — the card never breaks.
 
