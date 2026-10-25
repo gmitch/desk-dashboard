@@ -35,6 +35,24 @@ work-hours gaps are break-room/walk themed, weekends are family themed.
 - With no key (or if the call fails), built-in fallback lines rotate
   instead — the card never breaks.
 
+## Commute / traffic (optional)
+
+A compact card under the meetings: live drive time for both directions
+of a commute, e.g. "To Work: 32 min (24 typical, +8 traffic · heavy)".
+
+- Data comes from the **TomTom Routing API** (free tier: 2,500
+  requests/day, no credit card). Get a key at developer.tomtom.com.
+- All of it lives in Script Properties — nothing about your route is
+  in the repo or the page:
+  - `TOMTOM_KEY` — the API key.
+  - `COMMUTE_A`, `COMMUTE_B` — the two endpoints as `lat,lon`
+    (right-click in Google Maps to copy coordinates).
+  - `COMMUTE_A_LABEL`, `COMMUTE_B_LABEL` — optional names
+    (defaults: Home / Work).
+- The script fetches each direction at most every 5 minutes, so the
+  daily call count stays far inside the free tier. With no key or no
+  endpoints, the card simply doesn't appear.
+
 ## Files
 
 - `index.html` — the dashboard page (GitHub Pages entry point).

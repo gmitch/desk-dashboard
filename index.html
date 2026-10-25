@@ -17,7 +17,7 @@
   #layout {
     display: grid;
     grid-template-columns: 1fr 1.2fr;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto 1fr auto auto;
     height: 100vh;
     padding: 18px 22px 12px;
     gap: 10px 26px;
@@ -49,8 +49,10 @@
   .m-meta .room { color: #fff; font-weight: 600; }
   .m-count { color: #7fb2e5; font-weight: 600; }
   #empty { color: #5f7285; font-size: clamp(18px, 3vw, 32px); text-align: center; padding: 30px 0; }
+  #commute { grid-column: 1 / -1; grid-row: 3; }
+  #commute:empty { display: none; }
   #statusbar {
-    grid-column: 1 / -1; grid-row: 3;
+    grid-column: 1 / -1; grid-row: 4;
     display: flex; justify-content: space-between; align-items: center;
     font-size: 12px; color: #46586a;
   }
@@ -88,6 +90,7 @@
   <div id="meeting">
     <div id="empty">Checking your meetings…</div>
   </div>
+  <div id="commute"></div>
   <div id="statusbar">
     <div id="status">Desk Dashboard</div>
     <div id="gear" title="Settings">⚙</div>
@@ -207,6 +210,7 @@ async function loadMeetings() {
     meetingData = data;
     lastFetchOk = new Date();
     renderMeetings();
+    renderCommute();
     document.getElementById('status').innerText =
       'Updated ' + lastFetchOk.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   } catch (e) {
@@ -248,6 +252,20 @@ function statusCardHtml(quip) {
   return '<div class="card">' +
     '<span class="tag">Where\'s Mitch?</span>' +
     '<div class="m-title">' + esc(quip) + '</div></div>';
+}
+
+function renderCommute() {
+  const wrap = document.getElementById('commute');
+  const legs = meetingData && meetingData.commute && meetingData.commute.legs;
+  if (!legs || !legs.length) { wrap.innerHTML = ''; return; }
+  const lines = legs.map(function (leg) {
+    return 'To ' + esc(leg.to) + ': <b>' + leg.minutes + ' min</b>' +
+      ' (' + leg.typicalMinutes + ' typical' +
+      (leg.delayMinutes > 0 ? ', +' + leg.delayMinutes + ' traffic' : '') +
+      ' · ' + esc(leg.level) + ')';
+  }).join(' &nbsp;·&nbsp; ');
+  wrap.innerHTML = '<div class="card"><span class="tag">🚗 Commute</span>' +
+    '<div class="m-meta">' + lines + '</div></div>';
 }
 
 function renderMeetings() {

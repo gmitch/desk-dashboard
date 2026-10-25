@@ -114,7 +114,9 @@ function buildPayload_(props) {
     current: currentDesc,
     next: nextDesc,
     // "Where's Mitch?" quip — only needed when he is not in a meeting.
-    status: currentDesc ? null : buildStatus_(now, tz, nextDesc)
+    status: currentDesc ? null : buildStatus_(now, tz, nextDesc),
+    // Commute times — null until TOMTOM_KEY + route endpoints are set.
+    commute: commuteBlock_()
   };
 }
 
@@ -303,4 +305,75 @@ function aiQuip_(now, tz, bucket, next) {
   } catch (err) {
     return null;
   }
+}
+
+
+/* ================= Commute / traffic =================
+ * Live drive times via the TomTom Routing API (free tier, 2,500
+ * requests/day — no credit card). Both directions are fetched so the
+ * card shows "to work" and "to home" at a glance.
+ *
+ * Required Script Properties (only if you want the commute card):
+ *   TOMTOM_KEY  - free API key from developer.tomtom.com.
+ *   COMMUTE_A   - one endpoint as "lat,lon" (e.g. home).
+ *   COMMUTE_B   - the other endpoint as "lat,lon" (e.g. work).
+ *                 Get coordinates by right-clicking in Google Maps.
+ * Optional:
+ *   COMMUTE_A_LABEL, COMMUTE_B_LABEL - names for the endpoints
+ *                 (defaults: "Home" and "Work").
+ *
+ * Results are cached 5 minutes: traffic doesn't need fresher data
+ * than that, and two calls per fetch is far inside the free tier.
+ * No key or no endpoints => commute is null and the card hides.
+ */
+var COMMUTE_CACHE_SEC_ = 300;
+
+function commuteBlock_() {
+  var props = PropertiesService.getScriptProperties();
+  var apiKey = props.getProperty('TOMTOM_KEY');
+  var a = props.getProperty('COMMUTE_A');
+  var b = props.getProperty('COMMUTE_B');
+  if (!apiKey || !a || !b) return null;
+  var aLabel = props.getProperty('COMMUTE_A_LABEL') || 'Home';
+  var bLabel = props.getProperty('COMMUTE_B_LABEL') || 'Work';
+  var legs = [
+    commuteLeg_(apiKey, a, b, bLabel),
+    commuteLeg_(apiKey, b, a, aLabel)
+  ];
+  var ok = legs.filter(function (l) { return l !== null; });
+  if (ok.length === 0) return null;
+  return { legs: ok };
+}
+
+function commuteLeg_(apiKey, from, to, toLabel) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'commute|' + from + '|' + to;
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+  var leg = null;
+  try {
+    var url = 'https://api.tomtom.com/routing/1/calculateRoute/' +
+      encodeURIComponent(from) + ':' + encodeURIComponent(to) +
+      '/json?key=' + encodeURIComponent(apiKey) + '&traffic=true&travelMode=car';
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) {
+      var data = JSON.parse(res.getContentText());
+      var summary = data.routes && data.routes[0] && data.routes[0].summary;
+      if (summary) {
+        var travelMin = Math.round(summary.travelTimeInSeconds / 60);
+        var delayMin = Math.round((summary.trafficDelayInSeconds || 0) / 60);
+        leg = {
+          to: toLabel,
+          minutes: travelMin,
+          typicalMinutes: Math.max(1, travelMin - delayMin),
+          delayMinutes: delayMin,
+          level: delayMin <= 2 ? 'light' : (delayMin <= Math.max(5, (travelMin - delayMin) * 0.25) ? 'moderate' : 'heavy')
+        };
+        cache.put(cacheKey, JSON.stringify(leg), COMMUTE_CACHE_SEC_);
+      }
+    }
+  } catch (err) {
+    leg = null;
+  }
+  return leg;
 }
