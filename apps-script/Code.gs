@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25c';
+var CODE_VERSION_ = '2026-10-25d';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -366,6 +366,15 @@ function commuteBlock_() {
   if (l1.leg) legs.push(l1.leg); else if (l1.error) errors.push(l1.error);
   if (l2.leg) legs.push(l2.leg); else if (l2.error) errors.push(l2.error);
   return { legs: legs, error: legs.length ? null : (errors[0] || 'unknown') };
+}
+
+// Editor-runnable test: unlike doGet (which returns 'unauthorized'
+// before reaching any external call when run without a web request),
+// this goes straight to the TomTom call, so running it triggers the
+// authorization prompt for the script.external_request scope. Run it,
+// accept the prompt, run it again, and the execution log shows the legs.
+function testCommute() {
+  Logger.log(JSON.stringify(commuteBlock_()));
 }
 
 function commuteLeg_(apiKey, from, to, toLabel) {
