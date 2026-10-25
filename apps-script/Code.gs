@@ -333,24 +333,27 @@ function commuteBlock_() {
   var apiKey = props.getProperty('TOMTOM_KEY');
   var a = props.getProperty('COMMUTE_A');
   var b = props.getProperty('COMMUTE_B');
-  if (!apiKey || !a || !b) return null;
+  // The error field is a debugging aid for the endpoint's JSON:
+  // missing_key / missing_endpoints / tomtom_<http code> / no_route /
+  // fetch_failed. It never contains the key or the coordinates.
+  if (!apiKey) return { legs: [], error: 'missing_key' };
+  if (!a || !b) return { legs: [], error: 'missing_endpoints' };
   var aLabel = props.getProperty('COMMUTE_A_LABEL') || 'Home';
   var bLabel = props.getProperty('COMMUTE_B_LABEL') || 'Work';
-  var legs = [
-    commuteLeg_(apiKey, a, b, bLabel),
-    commuteLeg_(apiKey, b, a, aLabel)
-  ];
-  var ok = legs.filter(function (l) { return l !== null; });
-  if (ok.length === 0) return null;
-  return { legs: ok };
+  var legs = [];
+  var errors = [];
+  var l1 = commuteLeg_(apiKey, a, b, bLabel);
+  var l2 = commuteLeg_(apiKey, b, a, aLabel);
+  if (l1.leg) legs.push(l1.leg); else if (l1.error) errors.push(l1.error);
+  if (l2.leg) legs.push(l2.leg); else if (l2.error) errors.push(l2.error);
+  return { legs: legs, error: legs.length ? null : (errors[0] || 'unknown') };
 }
 
 function commuteLeg_(apiKey, from, to, toLabel) {
   var cache = CacheService.getScriptCache();
   var cacheKey = 'commute|' + from + '|' + to;
   var cached = cache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-  var leg = null;
+  if (cached) return { leg: JSON.parse(cached), error: null };
   try {
     var url = 'https://api.tomtom.com/routing/1/calculateRoute/' +
       encodeURIComponent(from) + ':' + encodeURIComponent(to) +
@@ -362,7 +365,7 @@ function commuteLeg_(apiKey, from, to, toLabel) {
       if (summary) {
         var travelMin = Math.round(summary.travelTimeInSeconds / 60);
         var delayMin = Math.round((summary.trafficDelayInSeconds || 0) / 60);
-        leg = {
+        var leg = {
           to: toLabel,
           minutes: travelMin,
           typicalMinutes: Math.max(1, travelMin - delayMin),
@@ -370,10 +373,12 @@ function commuteLeg_(apiKey, from, to, toLabel) {
           level: delayMin <= 2 ? 'light' : (delayMin <= Math.max(5, (travelMin - delayMin) * 0.25) ? 'moderate' : 'heavy')
         };
         cache.put(cacheKey, JSON.stringify(leg), COMMUTE_CACHE_SEC_);
+        return { leg: leg, error: null };
       }
+      return { leg: null, error: 'no_route' };
     }
+    return { leg: null, error: 'tomtom_' + res.getResponseCode() };
   } catch (err) {
-    leg = null;
+    return { leg: null, error: 'fetch_failed' };
   }
-  return leg;
 }
