@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25b';
+var CODE_VERSION_ = '2026-10-25c';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -399,8 +399,11 @@ function commuteLeg_(apiKey, from, to, toLabel) {
     return { leg: null, error: 'tomtom_' + res.getResponseCode() };
   } catch (err) {
     // Report the failure reason, but never the URL: it carries the API
-    // key (query string) and the route coordinates (path).
-    var msg = String((err && err.message) || err).replace(/https?:\/\/\S+/g, '[url]');
-    return { leg: null, error: 'fetch_failed: ' + msg.slice(0, 100) };
+    // key (query string) and the route coordinates (path). Scope names
+    // are safe to keep — they say which permission is missing.
+    var msg = String((err && err.message) || err)
+      .replace(/https:\/\/www\.googleapis\.com\/auth\/([a-z0-9._-]+)/gi, 'scope:$1')
+      .replace(/https?:\/\/\S+/g, '[url]');
+    return { leg: null, error: 'fetch_failed: ' + msg.slice(0, 160) };
   }
 }
