@@ -57,11 +57,25 @@
     font-size: 12px; color: #46586a;
   }
   #gear { cursor: pointer; font-size: 16px; opacity: 0.5; padding: 4px 8px; }
+  #status { cursor: pointer; }
   #setup {
     position: fixed; inset: 0; background: rgba(4, 8, 12, 0.96);
     display: none; align-items: center; justify-content: center; z-index: 10;
   }
   #setup.open { display: flex; }
+  #debug {
+    position: fixed; inset: 0; background: rgba(4, 8, 12, 0.96);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+  }
+  #debug.open { display: flex; }
+  #debug .box { width: min(560px, 92vw); text-align: left; }
+  #debug h1 { font-size: 22px; margin-bottom: 12px; }
+  #debug-text {
+    text-align: left; white-space: pre-wrap; word-break: break-word;
+    font-size: 13px; line-height: 1.5; color: #c7d3df;
+    background: #10161d; border: 1px solid #2c3e50; border-radius: 8px;
+    padding: 12px; max-height: 60vh; overflow: auto; margin-bottom: 10px;
+  }
   #setup .box { width: min(480px, 90vw); text-align: center; }
   #setup h1 { font-size: 26px; margin-bottom: 10px; }
   #setup p { color: #8fa3b8; font-size: 15px; margin-bottom: 18px; line-height: 1.45; }
@@ -69,11 +83,12 @@
     width: 100%; padding: 12px; font-size: 17px; border-radius: 8px;
     border: 1px solid #2c3e50; background: #10161d; color: #e8eef4; margin-bottom: 10px;
   }
-  #setup button {
+  #setup button, #debug button {
     width: 100%; padding: 12px; font-size: 17px; font-weight: 600; border: 0;
     border-radius: 8px; background: #1f6feb; color: #fff; cursor: pointer;
   }
-  #setup .err { color: #f08a5d; min-height: 20px; margin-top: 10px; font-size: 14px; }
+  #debug button { margin-bottom: 10px; }
+  #setup .err, #debug .err { color: #f08a5d; min-height: 20px; margin-top: 10px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -92,7 +107,7 @@
   </div>
   <div id="commute"></div>
   <div id="statusbar">
-    <div id="status">Desk Dashboard</div>
+    <div id="status" title="Click for debug info">Desk Dashboard</div>
     <div id="gear" title="Settings">⚙</div>
   </div>
 </div>
@@ -107,6 +122,16 @@
     <input id="key-input" type="password" placeholder="Dashboard key" autocomplete="off">
     <button id="key-save">Save</button>
     <div class="err" id="setup-err"></div>
+  </div>
+</div>
+
+<div id="debug">
+  <div class="box">
+    <h1>Debug info</h1>
+    <pre id="debug-text"></pre>
+    <button id="debug-copy">Copy debug info</button>
+    <button id="debug-close">Close</button>
+    <div class="err" id="debug-err"></div>
   </div>
 </div>
 
@@ -125,12 +150,21 @@ const CFG = Object.assign({
   locationLabel: 'Sunnyvale · 94089',
   timezone: 'America/Los_Angeles'
 }, window.DASH_CONFIG || {});
+// Bump on every release — the debug modal shows this so a stale page
+// is immediately visible. Keep in step with CODE_VERSION_ in Code.gs.
+const PAGE_VERSION = '2026-10-25';
 const LS_KEY = 'dash.key';
 const LS_ENDPOINT = 'dash.endpoint';
 let endpoint = CFG.endpoint || localStorage.getItem(LS_ENDPOINT) || '';
 let dashKey = localStorage.getItem(LS_KEY) || '';
 let meetingData = null;
 let lastFetchOk = null;
+// Debug state for the "Updated…" modal. The key itself is never stored
+// here or displayed — only whether one is stored.
+const pageLoadedAt = new Date();
+let lastFetchError = null;
+let pollOk = 0, pollFail = 0;
+let lastWeatherAt = null, lastWeatherOk = null;
 
 /* ===================== clock ===================== */
 function tickClock() {
@@ -175,8 +209,12 @@ async function loadWeather() {
       (WX_TEXT[cur.weather_code] || '—') + ' in ' + (CFG.locationLabel || 'your area');
     document.getElementById('wx-sub').innerText =
       'Today ' + lo + '° – ' + hi + '° · Wind ' + Math.round(cur.wind_speed_10m || 0) + ' mph';
+    lastWeatherAt = new Date();
+    lastWeatherOk = true;
   } catch (e) {
     document.getElementById('wx-cond').innerText = 'Weather unavailable';
+    lastWeatherAt = new Date();
+    lastWeatherOk = false;
   }
 }
 
@@ -209,11 +247,15 @@ async function loadMeetings() {
     if (!data || data.error) throw new Error('bad response');
     meetingData = data;
     lastFetchOk = new Date();
+    lastFetchError = null;
+    pollOk++;
     renderMeetings();
     renderCommute();
     document.getElementById('status').innerText =
       'Updated ' + lastFetchOk.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   } catch (e) {
+    lastFetchError = (e && e.message) || 'fetch failed';
+    pollFail++;
     document.getElementById('status').innerText =
       'Meeting data unreachable' + (lastFetchOk ? ' (last OK ' +
       lastFetchOk.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ')' : '');
@@ -315,6 +357,83 @@ document.getElementById('key-save').addEventListener('click', function () {
   loadMeetings();
 });
 document.getElementById('gear').addEventListener('click', function () { openSetup('', true); });
+
+/* ===================== debug modal (the "Updated…" text) ===================== */
+function buildDebugText() {
+  const L = [];
+  const fmt = (d) => d ? d.toLocaleString('en-US') : '—';
+  L.push('--- Page ---');
+  L.push('page version: ' + PAGE_VERSION);
+  L.push('page loaded: ' + fmt(pageLoadedAt));
+  L.push('page url: ' + location.href);
+  L.push('viewport: ' + window.innerWidth + 'x' + window.innerHeight);
+  L.push('user agent: ' + navigator.userAgent);
+  L.push('');
+  L.push('--- Endpoint ---');
+  L.push('endpoint url: ' + (endpoint || '(not set)'));
+  L.push('key stored: ' + (dashKey ? 'yes' : 'no'));
+  L.push('last fetch: ' + fmt(lastFetchOk) + (lastFetchError ? ' (FAILED: ' + lastFetchError + ')' : ' (ok)'));
+  L.push('polls ok: ' + pollOk + '  polls failed: ' + pollFail);
+  L.push('');
+  L.push('--- Server (last payload) ---');
+  if (meetingData) {
+    L.push('server time: ' + (meetingData.serverNow || '—'));
+    if (meetingData.meta) {
+      L.push('endpoint code version: ' + (meetingData.meta.codeVersion || '—'));
+      L.push('ai configured: ' + (meetingData.meta.aiConfigured ? 'yes' : 'no'));
+      L.push('tomtom configured: ' + (meetingData.meta.tomtomConfigured ? 'yes' : 'no'));
+    } else {
+      L.push('endpoint code version: — (old endpoint build, no meta field)');
+    }
+    L.push('current meeting: ' + (meetingData.current ? meetingData.current.title + ' @ ' + meetingData.current.room : 'none'));
+    L.push('next meeting: ' + (meetingData.next ? meetingData.next.startLabel + ' ' + meetingData.next.title + ' @ ' + meetingData.next.room : 'none'));
+    if (meetingData.status) {
+      L.push('where-is-mitch: ' + meetingData.status.quip + ' [' + (meetingData.status.source || '?') + ' / ' + (meetingData.status.bucket || '?') + ']');
+    }
+    if (meetingData.commute) {
+      L.push('commute error: ' + (meetingData.commute.error || 'none'));
+      (meetingData.commute.legs || []).forEach(function (leg) {
+        L.push('commute to ' + leg.to + ': ' + leg.minutes + ' min (typical ' + leg.typicalMinutes + ', +' + leg.delayMinutes + ')');
+      });
+    } else {
+      L.push('commute: not in payload (old endpoint build)');
+    }
+  } else {
+    L.push('(no payload received yet)');
+  }
+  L.push('');
+  L.push('--- Weather ---');
+  L.push('last weather fetch: ' + fmt(lastWeatherAt) +
+    (lastWeatherOk === false ? ' (FAILED)' : lastWeatherOk ? ' (ok)' : ''));
+  return L.join('\n');
+}
+function openDebug() {
+  document.getElementById('debug-text').textContent = buildDebugText();
+  document.getElementById('debug-err').innerText = '';
+  document.getElementById('debug').classList.add('open');
+}
+function closeDebug() {
+  document.getElementById('debug').classList.remove('open');
+}
+document.getElementById('status').addEventListener('click', openDebug);
+document.getElementById('debug-close').addEventListener('click', closeDebug);
+document.getElementById('debug').addEventListener('click', function (e) {
+  if (e.target.id === 'debug') closeDebug();
+});
+document.getElementById('debug-copy').addEventListener('click', async function () {
+  const text = document.getElementById('debug-text').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    document.getElementById('debug-err').innerText = 'Copied.';
+  } catch (e) {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('debug-text'));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.getElementById('debug-err').innerText = 'Select + copy manually (clipboard blocked).';
+  }
+});
 
 /* ===================== init (runs last, after all declarations) ===================== */
 (function init() {

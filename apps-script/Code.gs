@@ -29,6 +29,10 @@
 
 var DEFAULT_DURATION_MIN_ = 60;
 var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+// Bump on every release — the dashboard debug modal shows this so a
+// stale endpoint build is immediately visible. Keep in step with
+// PAGE_VERSION in index.html.
+var CODE_VERSION_ = '2026-10-25';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -116,7 +120,14 @@ function buildPayload_(props) {
     // "Where's Mitch?" quip — only needed when he is not in a meeting.
     status: currentDesc ? null : buildStatus_(now, tz, nextDesc),
     // Commute times — null until TOMTOM_KEY + route endpoints are set.
-    commute: commuteBlock_()
+    commute: commuteBlock_(),
+    // Debug metadata for the dashboard's debug modal. Booleans only —
+    // no keys or coordinates are ever sent to the page.
+    meta: {
+      codeVersion: CODE_VERSION_,
+      aiConfigured: !!props.getProperty('AI_API_KEY'),
+      tomtomConfigured: !!props.getProperty('TOMTOM_KEY')
+    }
   };
 }
 
@@ -259,13 +270,21 @@ function buildStatus_(now, tz, next) {
   // 2 minutes, so adding the AI_API_KEY (or the API recovering) takes
   // effect almost at once instead of waiting out the block.
   var cacheKey = 'quip|' + bucket + '|' + (next ? next.startISO : 'none');
-  var quip = cache.get(cacheKey);
-  if (!quip) {
-    var ai = aiQuip_(now, tz, bucket, next);
-    quip = ai || fallbackQuip_(bucket, block);
-    cache.put(cacheKey, quip, ai ? QUIP_CACHE_MIN_ * 60 : 120);
+  var cached = cache.get(cacheKey);
+  if (cached) {
+    try {
+      var obj = JSON.parse(cached);
+      if (obj && obj.quip) return { bucket: bucket, quip: obj.quip, source: obj.source || 'cached' };
+    } catch (err) { /* legacy plain-string entry */ }
+    return { bucket: bucket, quip: cached, source: 'cached' };
   }
-  return { bucket: bucket, quip: quip };
+  var ai = aiQuip_(now, tz, bucket, next);
+  var quip, source;
+  if (ai) { quip = ai; source = 'ai'; }
+  else { quip = fallbackQuip_(bucket, block); source = 'fallback'; }
+  cache.put(cacheKey, JSON.stringify({ quip: quip, source: source }),
+            ai ? QUIP_CACHE_MIN_ * 60 : 120);
+  return { bucket: bucket, quip: quip, source: source };
 }
 
 function fallbackQuip_(bucket, block) {

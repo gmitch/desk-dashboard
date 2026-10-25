@@ -53,6 +53,23 @@ of a commute, e.g. "To Work: 32 min (24 typical, +8 traffic · heavy)".
   daily call count stays far inside the free tier. With no key or no
   endpoints, the card simply doesn't appear.
 
+## Debugging
+
+Tap the "Updated …" text at the bottom of the dashboard to open a
+debug modal with everything needed to diagnose problems: page version
+and load time, the endpoint URL in use, last fetch result and error,
+poll success/failure counts, the endpoint's code version, whether the
+AI and TomTom keys are configured, the current/next meeting, the
+"Where's Mitch?" quip and its source (AI / fallback), and the commute
+legs or error. **Copy debug info** puts it all on the clipboard as
+plain text — paste it to whoever is helping debug. The dashboard key
+itself is never shown, only whether one is stored.
+
+Note: Apps Script doesn't expose a deployment's timestamp at runtime,
+so version dates (bumped on every release in both `PAGE_VERSION` and
+`CODE_VERSION_`) plus last-fetch times are the proxies for "how new is
+this build".
+
 ## Files
 
 - `index.html` — the dashboard page (GitHub Pages entry point).
