@@ -100,10 +100,16 @@ editor right from the sheet.
 4. Copy the deployment URL (`.../exec`).
 
    CLI alternative: the manifest (`appsscript.json`) already carries the
-   web app config (access: ANYONE, execute as: you), so
+   web app config (access: ANYONE_ANONYMOUS — note: plain ANYONE in the
+   API means "any logged-in user", not anonymous — execute as: you), so
    `clasp deploy --description "desk-dashboard"` creates the same web app
    deployment without the editor — take the `/exec` URL from the
    deployment ID it prints.
+
+   Updating an existing deployment: use the editor's Manage deployments
+   → New version on that deployment, or `clasp redeploy <deploymentId>
+   <version>`. Plain `clasp deploy` creates a *new* deployment (and a
+   new URL) instead of updating the old one.
 
 "Anyone" is safe here: the URL is unguessable, and the script returns
 nothing without the key — it checks the key in constant time.
