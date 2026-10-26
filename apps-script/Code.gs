@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25f';
+var CODE_VERSION_ = '2026-10-25g';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -269,7 +269,10 @@ function buildStatus_(now, tz, next) {
   // AI lines are cached for the full window — but fallback lines only
   // 2 minutes, so adding the AI_API_KEY (or the API recovering) takes
   // effect almost at once instead of waiting out the block.
-  var cacheKey = 'quip|' + bucket + '|' + (next ? next.startISO : 'none');
+  // v2: entries cached before the prompt/validation fix are orphaned,
+  // so a bad cached line (e.g. a model fragment) doesn't linger for
+  // the full 30-minute AI TTL.
+  var cacheKey = 'quip|v2|' + bucket + '|' + (next ? next.startISO : 'none');
   var cached = cache.get(cacheKey);
   if (cached) {
     try {
@@ -302,7 +305,7 @@ function aiQuip_(now, tz, bucket, next) {
   var prompt = 'You write one-line status jokes for an office desk dashboard called "Where\'s Mitch?". ' +
     'Mitch is NOT in a meeting right now. It is ' + when + '. ' + nextTxt + ' ' +
     'Situation to riff on: ' + SITUATIONS_[bucket].hint + '. ' +
-    'Reply with ONE playful, dry line, at most 12 words, third person, no quotes, no emoji, no hashtags.';
+    'Reply with ONE complete, playful, dry sentence, at most 12 words, third person, plain text only: no markdown, no asterisks, no quotes, no emoji, no hashtags.';
   try {
     // AI_MODEL property overrides the built-in default, so a future
     // model retirement is a property edit, not a code change.
@@ -327,8 +330,15 @@ function aiQuip_(now, tz, bucket, next) {
     }
     var data = JSON.parse(res.getContentText());
     var text = (data.candidates[0].content.parts[0].text || '')
-      .replace(/\s+/g, ' ').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+      .replace(/\s+/g, ' ')
+      .replace(/[*_]/g, '')
+      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .replace(/\s+/g, ' ').trim();
     if (!text) return { quip: null, error: 'empty_response' };
+    // A fragment (e.g. a bare label the model emitted instead of a
+    // line) is worse than a fallback — reject it and let the fallback
+    // cover until the next generation.
+    if (text.split(/\s+/).length < 3) return { quip: null, error: 'short_response' };
     return { quip: text.length > 110 ? text.substring(0, 107) + '…' : text, error: null };
   } catch (err) {
     return { quip: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err) };
