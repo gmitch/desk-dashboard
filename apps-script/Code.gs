@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25i';
+var CODE_VERSION_ = '2026-10-25j';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -277,17 +277,17 @@ function buildStatus_(now, tz, next) {
   if (cached) {
     try {
       var obj = JSON.parse(cached);
-      if (obj && obj.quip) return { bucket: bucket, quip: obj.quip, source: obj.source || 'cached', aiError: obj.aiError || null };
+      if (obj && obj.quip) return { bucket: bucket, quip: obj.quip, source: obj.source || 'cached', aiError: obj.aiError || null, aiRaw: obj.aiRaw || null };
     } catch (err) { /* legacy plain-string entry */ }
-    return { bucket: bucket, quip: cached, source: 'cached', aiError: null };
+    return { bucket: bucket, quip: cached, source: 'cached', aiError: null, aiRaw: null };
   }
   var ai = aiQuip_(now, tz, bucket, next);
-  var quip, source, aiError = null;
+  var quip, source, aiError = null, aiRaw = null;
   if (ai && ai.quip) { quip = ai.quip; source = 'ai'; }
-  else { quip = fallbackQuip_(bucket, block); source = 'fallback'; aiError = (ai && ai.error) || 'unknown'; }
-  cache.put(cacheKey, JSON.stringify({ quip: quip, source: source, aiError: aiError }),
+  else { quip = fallbackQuip_(bucket, block); source = 'fallback'; aiError = (ai && ai.error) || 'unknown'; aiRaw = (ai && ai.aiRaw) || null; }
+  cache.put(cacheKey, JSON.stringify({ quip: quip, source: source, aiError: aiError, aiRaw: aiRaw }),
             source === 'ai' ? QUIP_CACHE_MIN_ * 60 : 120);
-  return { bucket: bucket, quip: quip, source: source, aiError: aiError };
+  return { bucket: bucket, quip: quip, source: source, aiError: aiError, aiRaw: aiRaw };
 }
 
 function fallbackQuip_(bucket, block) {
@@ -297,7 +297,7 @@ function fallbackQuip_(bucket, block) {
 
 function aiQuip_(now, tz, bucket, next) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('AI_API_KEY');
-  if (!apiKey) return { quip: null, error: 'missing_key' };
+  if (!apiKey) return { quip: null, error: 'missing_key', aiRaw: null };
   var when = Utilities.formatDate(now, tz, 'EEEE h:mm a');
   var nextTxt = next
     ? 'His next meeting is ' + next.startLabel + ' ("' + next.title + '").'
@@ -307,6 +307,7 @@ function aiQuip_(now, tz, bucket, next) {
     'Situation to riff on: ' + SITUATIONS_[bucket].hint + '. ' +
     'Reply with ONE complete, playful, dry sentence, at most 12 words, third person, plain text only: no markdown, no asterisks, no quotes, no emoji, no hashtags. ' +
     'For example, a good reply looks like: \'Probably out walking the dog before dinner.\' (Do not copy this; write a fresh one for the situation above.)';
+  var bodyText = null;
   try {
     // AI_MODEL property overrides the built-in default, so a future
     // model retirement is a property edit, not a code change.
@@ -322,14 +323,15 @@ function aiQuip_(now, tz, bucket, next) {
         generationConfig: { temperature: 1.1, maxOutputTokens: 40 }
       })
     });
+    bodyText = res.getContentText();
     if (res.getResponseCode() !== 200) {
       // Gemini error bodies are JSON with error.message — that's the
       // useful part (e.g. 'API key not valid'). Fall back to raw text.
-      var msg = res.getContentText();
-      try { msg = JSON.parse(msg).error.message || msg; } catch (e) { /* raw text */ }
-      return { quip: null, error: 'gemini_' + res.getResponseCode() + ': ' + sanitizeErr_(msg) };
+      var msg = bodyText;
+      try { msg = JSON.parse(bodyText).error.message || bodyText; } catch (e) { /* raw text */ }
+      return { quip: null, error: 'gemini_' + res.getResponseCode() + ': ' + sanitizeErr_(msg), aiRaw: sanitizeErr_(bodyText, 2000) };
     }
-    var data = JSON.parse(res.getContentText());
+    var data = JSON.parse(bodyText);
     var candidate = (data.candidates && data.candidates[0]) || null;
     var content = (candidate && candidate.content) || null;
     var parts = (content && content.parts) || [];
@@ -339,7 +341,7 @@ function aiQuip_(now, tz, bucket, next) {
       // label, or we're blind again one level down.
       var fb = data.promptFeedback || {};
       var reason = fb.blockReason || (candidate && candidate.finishReason) || 'empty';
-      return { quip: null, error: 'no_candidates:' + reason };
+      return { quip: null, error: 'no_candidates:' + reason, aiRaw: sanitizeErr_(bodyText, 2000) };
     }
     // Join all parts: some models split a reply across parts, and
     // reading only the first one used to surface bare fragments.
@@ -349,26 +351,27 @@ function aiQuip_(now, tz, bucket, next) {
       .replace(/[*_]/g, '')
       .replace(/^["'“”]+|["'“”]+$/g, '')
       .replace(/\s+/g, ' ').trim();
-    if (!text) return { quip: null, error: 'empty_response' };
+    if (!text) return { quip: null, error: 'empty_response', aiRaw: sanitizeErr_(bodyText, 2000) };
     // A fragment (e.g. a bare label the model emitted instead of a
     // line) is worse than a fallback — reject it and let the fallback
     // cover until the next generation. Include the rejected text so
     // the debug modal shows what the model actually emitted.
-    if (text.split(/\s+/).length < 3) return { quip: null, error: 'short_response: "' + text.slice(0, 60) + '"' };
-    return { quip: text.length > 110 ? text.substring(0, 107) + '…' : text, error: null };
+    if (text.split(/\s+/).length < 3) return { quip: null, error: 'short_response: "' + text.slice(0, 60) + '"', aiRaw: sanitizeErr_(bodyText, 2000) };
+    return { quip: text.length > 110 ? text.substring(0, 107) + '…' : text, error: null, aiRaw: null };
   } catch (err) {
-    return { quip: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err) };
+    return { quip: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err), aiRaw: bodyText ? sanitizeErr_(bodyText, 2000) : null };
   }
 }
 
 // Strip anything URL-shaped (API keys, coordinates) from an error
 // message, but keep Google scope names — they say which permission is
-// missing. Shared by the commute and AI diagnostics.
-function sanitizeErr_(msg) {
+// missing. Shared by the commute and AI diagnostics. maxLen caps the
+// output (short for error lines, longer for echoed response bodies).
+function sanitizeErr_(msg, maxLen) {
   return String(msg)
     .replace(/https:\/\/www\.googleapis\.com\/auth\/([a-z0-9._-]+)/gi, 'scope:$1')
     .replace(/https?:\/\/\S+/g, '[url]')
-    .slice(0, 160);
+    .slice(0, maxLen || 160);
 }
 
 
