@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25g';
+var CODE_VERSION_ = '2026-10-25h';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -305,7 +305,8 @@ function aiQuip_(now, tz, bucket, next) {
   var prompt = 'You write one-line status jokes for an office desk dashboard called "Where\'s Mitch?". ' +
     'Mitch is NOT in a meeting right now. It is ' + when + '. ' + nextTxt + ' ' +
     'Situation to riff on: ' + SITUATIONS_[bucket].hint + '. ' +
-    'Reply with ONE complete, playful, dry sentence, at most 12 words, third person, plain text only: no markdown, no asterisks, no quotes, no emoji, no hashtags.';
+    'Reply with ONE complete, playful, dry sentence, at most 12 words, third person, plain text only: no markdown, no asterisks, no quotes, no emoji, no hashtags. ' +
+    'For example, a good reply looks like: \'Probably out walking the dog before dinner.\' (Do not copy this; write a fresh one for the situation above.)';
   try {
     // AI_MODEL property overrides the built-in default, so a future
     // model retirement is a property edit, not a code change.
@@ -329,7 +330,14 @@ function aiQuip_(now, tz, bucket, next) {
       return { quip: null, error: 'gemini_' + res.getResponseCode() + ': ' + sanitizeErr_(msg) };
     }
     var data = JSON.parse(res.getContentText());
-    var text = (data.candidates[0].content.parts[0].text || '')
+    var candidate = (data.candidates && data.candidates[0]) || null;
+    var content = (candidate && candidate.content) || null;
+    var parts = (content && content.parts) || [];
+    if (!parts.length) return { quip: null, error: 'no_candidates' };
+    // Join all parts: some models split a reply across parts, and
+    // reading only the first one used to surface bare fragments.
+    var raw = parts.map(function (p) { return p.text || ''; }).join(' ');
+    var text = raw
       .replace(/\s+/g, ' ')
       .replace(/[*_]/g, '')
       .replace(/^["'“”]+|["'“”]+$/g, '')
@@ -337,8 +345,9 @@ function aiQuip_(now, tz, bucket, next) {
     if (!text) return { quip: null, error: 'empty_response' };
     // A fragment (e.g. a bare label the model emitted instead of a
     // line) is worse than a fallback — reject it and let the fallback
-    // cover until the next generation.
-    if (text.split(/\s+/).length < 3) return { quip: null, error: 'short_response' };
+    // cover until the next generation. Include the rejected text so
+    // the debug modal shows what the model actually emitted.
+    if (text.split(/\s+/).length < 3) return { quip: null, error: 'short_response: "' + text.slice(0, 60) + '"' };
     return { quip: text.length > 110 ? text.substring(0, 107) + '…' : text, error: null };
   } catch (err) {
     return { quip: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err) };
