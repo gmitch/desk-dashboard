@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25h';
+var CODE_VERSION_ = '2026-10-25i';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -333,7 +333,14 @@ function aiQuip_(now, tz, bucket, next) {
     var candidate = (data.candidates && data.candidates[0]) || null;
     var content = (candidate && candidate.content) || null;
     var parts = (content && content.parts) || [];
-    if (!parts.length) return { quip: null, error: 'no_candidates' };
+    if (!parts.length) {
+      // A 200 with no usable text is usually a safety block or an
+      // empty/degraded reply — surface the reason instead of a bare
+      // label, or we're blind again one level down.
+      var fb = data.promptFeedback || {};
+      var reason = fb.blockReason || (candidate && candidate.finishReason) || 'empty';
+      return { quip: null, error: 'no_candidates:' + reason };
+    }
     // Join all parts: some models split a reply across parts, and
     // reading only the first one used to surface bare fragments.
     var raw = parts.map(function (p) { return p.text || ''; }).join(' ');
