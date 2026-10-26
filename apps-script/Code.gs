@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25d';
+var CODE_VERSION_ = '2026-10-25e';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -274,17 +274,17 @@ function buildStatus_(now, tz, next) {
   if (cached) {
     try {
       var obj = JSON.parse(cached);
-      if (obj && obj.quip) return { bucket: bucket, quip: obj.quip, source: obj.source || 'cached' };
+      if (obj && obj.quip) return { bucket: bucket, quip: obj.quip, source: obj.source || 'cached', aiError: obj.aiError || null };
     } catch (err) { /* legacy plain-string entry */ }
-    return { bucket: bucket, quip: cached, source: 'cached' };
+    return { bucket: bucket, quip: cached, source: 'cached', aiError: null };
   }
   var ai = aiQuip_(now, tz, bucket, next);
-  var quip, source;
-  if (ai) { quip = ai; source = 'ai'; }
-  else { quip = fallbackQuip_(bucket, block); source = 'fallback'; }
-  cache.put(cacheKey, JSON.stringify({ quip: quip, source: source }),
-            ai ? QUIP_CACHE_MIN_ * 60 : 120);
-  return { bucket: bucket, quip: quip, source: source };
+  var quip, source, aiError = null;
+  if (ai && ai.quip) { quip = ai.quip; source = 'ai'; }
+  else { quip = fallbackQuip_(bucket, block); source = 'fallback'; aiError = (ai && ai.error) || 'unknown'; }
+  cache.put(cacheKey, JSON.stringify({ quip: quip, source: source, aiError: aiError }),
+            source === 'ai' ? QUIP_CACHE_MIN_ * 60 : 120);
+  return { bucket: bucket, quip: quip, source: source, aiError: aiError };
 }
 
 function fallbackQuip_(bucket, block) {
@@ -294,7 +294,7 @@ function fallbackQuip_(bucket, block) {
 
 function aiQuip_(now, tz, bucket, next) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('AI_API_KEY');
-  if (!apiKey) return null;
+  if (!apiKey) return { quip: null, error: 'missing_key' };
   var when = Utilities.formatDate(now, tz, 'EEEE h:mm a');
   var nextTxt = next
     ? 'His next meeting is ' + next.startLabel + ' ("' + next.title + '").'
@@ -315,15 +315,31 @@ function aiQuip_(now, tz, bucket, next) {
         generationConfig: { temperature: 1.1, maxOutputTokens: 40 }
       })
     });
-    if (res.getResponseCode() !== 200) return null;
+    if (res.getResponseCode() !== 200) {
+      // Gemini error bodies are JSON with error.message — that's the
+      // useful part (e.g. 'API key not valid'). Fall back to raw text.
+      var msg = res.getContentText();
+      try { msg = JSON.parse(msg).error.message || msg; } catch (e) { /* raw text */ }
+      return { quip: null, error: 'gemini_' + res.getResponseCode() + ': ' + sanitizeErr_(msg) };
+    }
     var data = JSON.parse(res.getContentText());
     var text = (data.candidates[0].content.parts[0].text || '')
       .replace(/\s+/g, ' ').replace(/^["'“”]+|["'“”]+$/g, '').trim();
-    if (!text) return null;
-    return text.length > 110 ? text.substring(0, 107) + '…' : text;
+    if (!text) return { quip: null, error: 'empty_response' };
+    return { quip: text.length > 110 ? text.substring(0, 107) + '…' : text, error: null };
   } catch (err) {
-    return null;
+    return { quip: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err) };
   }
+}
+
+// Strip anything URL-shaped (API keys, coordinates) from an error
+// message, but keep Google scope names — they say which permission is
+// missing. Shared by the commute and AI diagnostics.
+function sanitizeErr_(msg) {
+  return String(msg)
+    .replace(/https:\/\/www\.googleapis\.com\/auth\/([a-z0-9._-]+)/gi, 'scope:$1')
+    .replace(/https?:\/\/\S+/g, '[url]')
+    .slice(0, 160);
 }
 
 
@@ -408,11 +424,7 @@ function commuteLeg_(apiKey, from, to, toLabel) {
     return { leg: null, error: 'tomtom_' + res.getResponseCode() };
   } catch (err) {
     // Report the failure reason, but never the URL: it carries the API
-    // key (query string) and the route coordinates (path). Scope names
-    // are safe to keep — they say which permission is missing.
-    var msg = String((err && err.message) || err)
-      .replace(/https:\/\/www\.googleapis\.com\/auth\/([a-z0-9._-]+)/gi, 'scope:$1')
-      .replace(/https?:\/\/\S+/g, '[url]');
-    return { leg: null, error: 'fetch_failed: ' + msg.slice(0, 160) };
+    // key (query string) and the route coordinates (path).
+    return { leg: null, error: 'fetch_failed: ' + sanitizeErr_((err && err.message) || err) };
   }
 }

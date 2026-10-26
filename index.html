@@ -152,7 +152,7 @@ const CFG = Object.assign({
 }, window.DASH_CONFIG || {});
 // Bump on every release — the debug modal shows this so a stale page
 // is immediately visible. Keep in step with CODE_VERSION_ in Code.gs.
-const PAGE_VERSION = '2026-10-25';
+const PAGE_VERSION = '2026-10-25b';
 const LS_KEY = 'dash.key';
 const LS_ENDPOINT = 'dash.endpoint';
 let endpoint = CFG.endpoint || localStorage.getItem(LS_ENDPOINT) || '';
@@ -389,6 +389,7 @@ function buildDebugText() {
     L.push('next meeting: ' + (meetingData.next ? meetingData.next.startLabel + ' ' + meetingData.next.title + ' @ ' + meetingData.next.room : 'none'));
     if (meetingData.status) {
       L.push('where-is-mitch: ' + meetingData.status.quip + ' [' + (meetingData.status.source || '?') + ' / ' + (meetingData.status.bucket || '?') + ']');
+      if (meetingData.status.aiError) L.push('ai error: ' + meetingData.status.aiError);
     }
     if (meetingData.commute) {
       L.push('commute error: ' + (meetingData.commute.error || 'none'));

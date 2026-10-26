@@ -61,7 +61,8 @@ and load time, the endpoint URL in use, last fetch result and error,
 poll success/failure counts, the endpoint's code version, whether the
 AI and TomTom keys are configured, the current/next meeting, the
 "Where's Mitch?" quip and its source (AI / fallback), and the commute
-legs or error. **Copy debug info** puts it all on the clipboard as
+legs or error. When the AI call fails, the modal also shows the Gemini
+error (e.g. an invalid key or quota message) as an `ai error` line. **Copy debug info** puts it all on the clipboard as
 plain text — paste it to whoever is helping debug. The dashboard key
 itself is never shown, only whether one is stored.
 
