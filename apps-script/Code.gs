@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25k';
+var CODE_VERSION_ = '2026-10-25l';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -269,10 +269,10 @@ function buildStatus_(now, tz, next) {
   // AI lines are cached for the full window — but fallback lines only
   // 2 minutes, so adding the AI_API_KEY (or the API recovering) takes
   // effect almost at once instead of waiting out the block.
-  // v2: entries cached before the prompt/validation fix are orphaned,
-  // so a bad cached line (e.g. a model fragment) doesn't linger for
-  // the full 30-minute AI TTL.
-  var cacheKey = 'quip|v2|' + bucket + '|' + (next ? next.startISO : 'none');
+  // v3: entries cached before the no-invented-details prompt fix are
+  // orphaned, so a hallucinated cached line doesn't linger for the
+  // full 30-minute AI TTL.
+  var cacheKey = 'quip|v3|' + bucket + '|' + (next ? next.startISO : 'none');
   var cached = cache.get(cacheKey);
   if (cached) {
     try {
@@ -306,6 +306,7 @@ function aiQuip_(now, tz, bucket, next) {
     'Mitch is NOT in a meeting right now. It is ' + when + '. ' + nextTxt + ' ' +
     'Situation to riff on: ' + SITUATIONS_[bucket].hint + '. ' +
     'Reply with ONE complete, playful, dry sentence, at most 12 words, third person, plain text only: no markdown, no asterisks, no quotes, no emoji, no hashtags. ' +
+    'Do not invent specific ages, names, or places — only use details the situation already gives you. ' +
     'For example, a good reply looks like: \'Probably out walking the dog before dinner.\' (Do not copy this; write a fresh one for the situation above.)';
   var bodyText = null;
   try {
