@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25e';
+var CODE_VERSION_ = '2026-10-25f';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -202,7 +202,7 @@ function occurrence_(now, day, startMin, weekOffset) {
  * Get a free key at aistudio.google.com/apikey and add it as the
  * AI_API_KEY script property. Never put the key in code.
  */
-var AI_MODEL_ = 'gemini-2.0-flash';
+var AI_MODEL_ = 'gemini-3.8-flash';
 var QUIP_CACHE_MIN_ = 30;
 
 var SITUATIONS_ = {
@@ -304,7 +304,10 @@ function aiQuip_(now, tz, bucket, next) {
     'Situation to riff on: ' + SITUATIONS_[bucket].hint + '. ' +
     'Reply with ONE playful, dry line, at most 12 words, third person, no quotes, no emoji, no hashtags.';
   try {
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL_ +
+    // AI_MODEL property overrides the built-in default, so a future
+    // model retirement is a property edit, not a code change.
+    var model = PropertiesService.getScriptProperties().getProperty('AI_MODEL') || AI_MODEL_;
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model +
               ':generateContent?key=' + encodeURIComponent(apiKey);
     var res = UrlFetchApp.fetch(url, {
       method: 'post',

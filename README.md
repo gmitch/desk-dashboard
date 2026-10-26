@@ -25,7 +25,7 @@ at where he is, based on the situation — after hours it's home/dinner/
 family themed, the small hours are sleep themed, lunchtime is lunch,
 work-hours gaps are break-room/walk themed, weekends are family themed.
 
-- Generated inside the Apps Script by Gemini (`gemini-2.0-flash`) when
+- Generated inside the Apps Script by Gemini (`gemini-3.8-flash`) when
   the optional `AI_API_KEY` script property is set — get a free key at
   aistudio.google.com/apikey. The key lives only in Script Properties.
 - Cached per situation: AI-written lines stick for 30 minutes, so the
