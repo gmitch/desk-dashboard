@@ -32,7 +32,7 @@ var DAY_INDEX_ = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 // Bump on every release — the dashboard debug modal shows this so a
 // stale endpoint build is immediately visible. Keep in step with
 // PAGE_VERSION in index.html.
-var CODE_VERSION_ = '2026-10-25j';
+var CODE_VERSION_ = '2026-10-25k';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -320,7 +320,12 @@ function aiQuip_(now, tz, bucket, next) {
       muteHttpExceptions: true,
       payload: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 1.1, maxOutputTokens: 40 }
+        // 300, not 40: this model thinks before answering, and the
+        // thinking tokens count against this budget. Observed
+        // thoughtsTokenCount 37 on a 40-token budget left nothing for
+        // the answer (empty content, MAX_TOKENS) — or a 1–2 word
+        // fragment when thinking used slightly less.
+        generationConfig: { temperature: 1.1, maxOutputTokens: 300 }
       })
     });
     bodyText = res.getContentText();
